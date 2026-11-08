@@ -57,6 +57,8 @@ public final class WaylandActivity extends Activity implements WaylandSessions.L
         status.setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
         root.addView(status);
         surface = new HostedSurfaceView(this);
+        // PERSONAL PATCH (not upstream).
+        surface.trackpadGestures(MagicDeskSettings.load().touchTrackpadGestures);
         surface.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             if (session != null && binding == null && right > left && bottom > top) changed();
         });

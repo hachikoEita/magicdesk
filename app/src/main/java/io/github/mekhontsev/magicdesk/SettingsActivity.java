@@ -264,6 +264,12 @@ public final class SettingsActivity extends Activity
         saveSetting(MagicDeskSettings.setOpenFilesWithSingleClick(enabled));
     }
 
+    // PERSONAL PATCH (not upstream).
+    @Override
+    public void setTouchTrackpadGestures(final boolean enabled) {
+        saveSetting(MagicDeskSettings.setTouchTrackpadGestures(enabled));
+    }
+
     @Override
     public void setMcpEnabled(final boolean enabled) {
         saveSetting(MagicDeskMcpPreferences.setEnabled(this, enabled));
