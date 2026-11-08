@@ -821,6 +821,8 @@
     <string name="status_desktop_launch_unavailable">Could not open %1$s</string>
     <string name="settings_taskbar_auto_hide">Automatically hide taskbar</string>
     <string name="settings_open_files_single_click">Open desktop and Files items with a single click</string>
+    <!-- PERSONAL PATCH (not upstream). -->
+    <string name="settings_touch_trackpad_gestures">Use trackpad-style gestures for direct touch (drag to move, tap to click, hold for right-click)</string>
     <string name="settings_open_touchpad_automatically">Open touchpad automatically</string>
     <string name="settings_keyboard_on_app_display">Show keyboard on app display</string>
     <string name="keyboard_placement_failed">Screen keyboard placement unavailable; input routing remains active. %1$s</string>

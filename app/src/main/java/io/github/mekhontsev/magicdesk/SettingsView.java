@@ -39,6 +39,9 @@ final class SettingsView {
 
         void setOpenFilesWithSingleClick(boolean enabled);
 
+        // PERSONAL PATCH (not upstream).
+        void setTouchTrackpadGestures(boolean enabled);
+
         void setMcpEnabled(boolean enabled);
         void setRunCommandEnabled(boolean enabled);
 
@@ -92,6 +95,8 @@ final class SettingsView {
     private final java.util.EnumMap<DesktopCompatibilityPolicy.Option, Switch> mCompatibility =
             new java.util.EnumMap<>(DesktopCompatibilityPolicy.Option.class);
     private Switch mOpenFilesWithSingleClick;
+    // PERSONAL PATCH (not upstream).
+    private Switch mTouchTrackpadGestures;
     private Switch mSystemDesktopMode;
     private Switch mProjectionDesktopOption;
     private final PlatformProjectionDriver.DesktopOption mProjectionOption =
@@ -151,6 +156,15 @@ final class SettingsView {
                 (button, checked) -> {
                     if (!mRendering) {
                         mActions.setOpenFilesWithSingleClick(checked);
+                    }
+                });
+        // PERSONAL PATCH (not upstream).
+        mTouchTrackpadGestures = addSwitch(
+                content, R.string.settings_touch_trackpad_gestures);
+        mTouchTrackpadGestures.setOnCheckedChangeListener(
+                (button, checked) -> {
+                    if (!mRendering) {
+                        mActions.setTouchTrackpadGestures(checked);
                     }
                 });
         mPhoneFullscreenByDefault = addSwitch(content, R.string.settings_phone_fullscreen_default);
@@ -376,6 +390,7 @@ final class SettingsView {
                 || mDisableAdaptiveBrightness == null
                 || mOpenTouchpadAutomatically == null
                 || mOpenFilesWithSingleClick == null
+                || mTouchTrackpadGestures == null
                 || mcp == null || runtime == null
                 || mMcpEnabled == null
                 || mMcpStatus == null) {
@@ -412,6 +427,7 @@ final class SettingsView {
             control.setEnabled(mDesktopSettingsAvailable);
         }
         mOpenFilesWithSingleClick.setEnabled(settings != null);
+        mTouchTrackpadGestures.setEnabled(settings != null);
         mKeyboardOnAppDisplay.setEnabled(settings != null);
         if (mProjectionDesktopOption != null) {
             mProjectionDesktopOption.setChecked(mProjectionOption.isEnabled());
@@ -420,6 +436,7 @@ final class SettingsView {
         if (settings != null) {
             mTaskbarAutoHide.setChecked(settings.taskbarAutoHide);
             mOpenFilesWithSingleClick.setChecked(settings.openFilesWithSingleClick);
+            mTouchTrackpadGestures.setChecked(settings.touchTrackpadGestures);
             mKeyboardOnAppDisplay.setChecked(settings.keyboardOnAppDisplay);
             mOpenTouchpadAutomatically.setChecked(settings.openTouchpadAutomatically);
             final DesktopCompatibilityPolicy compatibility = settings.compatibilityPolicy(

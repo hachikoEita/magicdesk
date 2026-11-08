@@ -61,6 +61,8 @@ public final class X11Activity extends Activity implements
         status.setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
         root.addView(status);
         surface = new HostedSurfaceView(this);
+        // PERSONAL PATCH (not upstream).
+        surface.trackpadGestures(MagicDeskSettings.load().touchTrackpadGestures);
         content = new HostedContentLayout(this, surface);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
@@ -69,6 +71,38 @@ public final class X11Activity extends Activity implements
         String id = state == null ? getIntent().getStringExtra(SESSION) : state.getString(SESSION);
         application = state == null ? getIntent().getBooleanExtra(APPLICATION, false) : state.getBoolean(APPLICATION);
         select(X11Sessions.find(id));
+        nudgeRotationIfNeeded();
+    }
+
+    // PERSONAL PATCH (not upstream). On this OPPO Find N6 (and apparently other recent
+    // foldables), a freshly created freeform window -- this one included, and unrelated third-
+    // party apps such as DroidDeck -- can open rotated about 90 degrees from the phone's actual
+    // orientation even while already unfolded and with auto-rotate on. That is a device/OS
+    // rotation-computation quirk at window-creation time, not something wrong with this specific
+    // window's content. Briefly toggling auto-rotate off and back on forces Android to recompute
+    // from the live sensor state instead of whatever stale value it used when the window was
+    // created -- the same technique already proven in the standalone n6-rotation-fix utility.
+    // Runs at most once per window instance, off the UI thread via the existing serialized
+    // background executor, and only when auto-rotate is actually enabled (an explicit manual
+    // rotation lock is left alone). Best-effort: a failure here just means this window may stay
+    // rotated until the phone's own next rotation change.
+    private boolean rotationNudged;
+
+    private void nudgeRotationIfNeeded() {
+        if (rotationNudged) return;
+        rotationNudged = true;
+        DesktopOperations.executeSerialized(() -> {
+            try {
+                int auto = android.provider.Settings.System.getInt(getContentResolver(),
+                        android.provider.Settings.System.ACCELEROMETER_ROTATION, -1);
+                if (auto != 1) return;
+                ShellAccess.run("/system/bin/settings put system accelerometer_rotation 0");
+                RuntimeDelays.pause(RuntimeDelays.Reason.VENDOR_COMMAND_SETTLE, 300L);
+                ShellAccess.run("/system/bin/settings put system accelerometer_rotation 1");
+            } catch (java.io.IOException | RuntimeException ignored) {
+                // Best-effort nudge; see comment above.
+            }
+        });
     }
 
     private void select(X11Sessions.Session next) {

@@ -20,6 +20,8 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     }
     private final HostedPointerInput pointerInput;
     private final HostedPointerCapture pointerCapture;
+    private final HostedTrackpadGesture trackpadGesture;
+    private boolean trackpadGestures;
     private final HostedCursor cursor = new HostedCursor();
     private HostedSurfaceOutput output;
     private LinuxGamepads gamepads;
@@ -43,6 +45,7 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     HostedSurfaceView(Context context) {
         super(context);
         pointerInput = new HostedPointerInput(this);
+        trackpadGesture = new HostedTrackpadGesture(this);
         pointerCapture = new HostedPointerCapture(new HostedPointerCapture.Host() {
             @Override public void request() { requestPointerCapture(); }
             @Override public void release() { releasePointerCapture(); }
@@ -184,6 +187,9 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
         cursor(null, 0, 0, false);
     }
 
+    /** PERSONAL PATCH (not upstream): relative trackpad-style gestures for direct on-screen touch. */
+    void trackpadGestures(boolean enabled) { trackpadGestures = enabled; }
+
     void allowInput(boolean allowed) {
         if (inputAllowed && !allowed) releaseInput();
         inputAllowed = allowed;
@@ -244,6 +250,12 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
             if (focusBoundary == null) releaseInput();
             if (focusBoundary == null && output != null) output.blur();
         } else if (focusBoundary == null && keyboardAllowed && inputAllowed && output != null && isFocused()) output.focus();
+        // PERSONAL PATCH (not upstream): when window focus is reasserted after being taken away
+        // mid-interaction (e.g. a desktop-shell focus bounce during a fold/unfold transition),
+        // a tap that already landed while unfocused never got to ask for the IME. Re-ask the
+        // instant this already-existing, event-driven callback reports focus is back, instead of
+        // leaving the keyboard silently missing until the next unrelated tap.
+        if (gain && isFocused()) textInputChanged();
         if (focusBoundary != null) focusBoundary.run();
     }
 
@@ -293,8 +305,13 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
         if (contentDrag) return true;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN || event.getActionMasked() == MotionEvent.ACTION_BUTTON_PRESS) {
             if (beforeInteraction != null) beforeInteraction.run();
-            if (keyboardAllowed) requestFocus();
+            // PERSONAL PATCH (not upstream): X11 sessions never call textInputChanged() on their
+            // own (that signal only exists on the Wayland path), so a tap here previously only
+            // asked the View system for focus and relied on the framework to notice and summon
+            // the IME on its own, which it does not reliably do. Ask explicitly every tap.
+            if (keyboardAllowed) { requestFocus(); textInputChanged(); }
         }
+        if (trackpadGestures && output != null && trackpadGesture.event(event, output, viewport)) return true;
         return pointerInput.event(event);
     }
 

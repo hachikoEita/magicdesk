@@ -66,6 +66,12 @@ final class MagicDeskSettings {
                 state -> state.settings.openFilesWithSingleClick = enabled);
     }
 
+    /** PERSONAL PATCH (not upstream). */
+    static boolean setTouchTrackpadGestures(final boolean enabled) {
+        return DesktopStateStore.update(
+                state -> state.settings.touchTrackpadGestures = enabled);
+    }
+
     static final class Values {
         private static final String TASKBAR_AUTO_HIDE = "taskbarAutoHide";
         private static final String KEEP_DESKTOP_AWAKE = "keepDesktopAwake";
@@ -79,6 +85,9 @@ final class MagicDeskSettings {
         private static final String KEYBOARD_ON_APP_DISPLAY = "keyboardOnAppDisplay";
         private static final String OPEN_FILES_WITH_SINGLE_CLICK =
                 "openFilesWithSingleClick";
+        // PERSONAL PATCH (not upstream).
+        private static final String TOUCH_TRACKPAD_GESTURES =
+                "touchTrackpadGestures";
 
         boolean taskbarAutoHide;
         boolean keepDesktopAwake;
@@ -92,6 +101,8 @@ final class MagicDeskSettings {
         final java.util.EnumMap<DesktopCompatibilityPolicy.Option, Boolean> compatibility =
                 new java.util.EnumMap<>(DesktopCompatibilityPolicy.Option.class);
         boolean openFilesWithSingleClick;
+        // PERSONAL PATCH (not upstream).
+        boolean touchTrackpadGestures;
 
         static Values defaults() {
             final Values values = new Values();
@@ -125,6 +136,8 @@ final class MagicDeskSettings {
                 }
                 values.openFilesWithSingleClick = json.optBoolean(
                         OPEN_FILES_WITH_SINGLE_CLICK, false);
+                values.touchTrackpadGestures = json.optBoolean(
+                        TOUCH_TRACKPAD_GESTURES, false);
             }
             return values;
         }
@@ -142,6 +155,7 @@ final class MagicDeskSettings {
             copy.keyboardOnAppDisplay = keyboardOnAppDisplay;
             copy.compatibility.putAll(compatibility);
             copy.openFilesWithSingleClick = openFilesWithSingleClick;
+            copy.touchTrackpadGestures = touchTrackpadGestures;
             return copy;
         }
 
@@ -167,6 +181,9 @@ final class MagicDeskSettings {
             json.put(
                     OPEN_FILES_WITH_SINGLE_CLICK,
                     openFilesWithSingleClick);
+            json.put(
+                    TOUCH_TRACKPAD_GESTURES,
+                    touchTrackpadGestures);
             return json;
         }
 

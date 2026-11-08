@@ -1,0 +1,69 @@
+name: Personal build (debug patches)
+
+# Personal fork workflow (not upstream): builds an installable APK of this fork's
+# personal patch set on demand. Triggered manually from the Actions tab, not on
+# every push, since this fork is just a personal testing ground.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Validate Android SDK components
+        shell: bash
+        run: |
+          test -f "$ANDROID_SDK_ROOT/platforms/android-37.0/android.jar"
+          test -x "$ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2"
+          test -x "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android35-clang"
+
+      - name: Graphics native host tools
+        uses: ./.github/actions/setup-graphics-build
+
+      - name: Generate a throwaway personal signing key
+        shell: bash
+        run: |
+          install -d -m 700 "$RUNNER_TEMP/magicdesk-signing"
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/magicdesk-signing/personal.jks" \
+            -storepass personalbuild -keypass personalbuild \
+            -alias personal -keyalg RSA -keysize 2048 -validity 36500 \
+            -dname "CN=Personal Build, OU=hachikoEita, O=Personal, L=NA, ST=NA, C=US"
+
+      - name: Build signed APK
+        env:
+          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_STORE_FILE: ${{ runner.temp }}/magicdesk-signing/personal.jks
+          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_STORE_PASSWORD: personalbuild
+          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_KEY_ALIAS: personal
+          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_KEY_PASSWORD: personalbuild
+        run: ./gradlew --no-daemon :app:assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: magicdesk-personal-build
+          if-no-files-found: error
+          retention-days: 14
+          path: app/build/outputs/apk/release/app-release.apk
