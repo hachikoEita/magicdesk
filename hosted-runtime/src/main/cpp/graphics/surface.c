@@ -17,6 +17,9 @@ struct MdgSurface {
     MdgImage *images[MAX_SWAPCHAIN_IMAGES];
     unsigned count, index, width, height;
     bool acquired, invalid, acquire_pending;
+    // PERSONAL PATCH (not upstream). See the suboptimal-handling comment on
+    // mdg_surface_acquire() below.
+    bool suboptimal;
 };
 
 static void release_swapchain(MdgSurface *surface) {
@@ -132,11 +135,22 @@ static bool create_swapchain(MdgSurface *surface, unsigned width, unsigned heigh
     return true;
 }
 
+// PERSONAL PATCH (not upstream). This Vulkan swapchain's preTransform is captured once, at
+// create_swapchain() time, from VkSurfaceCapabilitiesKHR.currentTransform. On this OPPO Find N6
+// (and reportedly other recent foldables), that value can already be wrong at the exact moment a
+// new freeform window is created while already unfolded -- a device/compositor timing quirk, not
+// a width/height mismatch, so the width/height-based recreation check below never catches it.
+// AcquireNextImageKHR/QueuePresentKHR report this mismatch as VK_SUBOPTIMAL_KHR, which previously
+// was silently treated as success everywhere, so a bad transform stayed wrong for the window's
+// entire lifetime. Standard WSI handling is to treat VK_SUBOPTIMAL_KHR as "still presentable this
+// frame, but rebuild before the next one" -- recorded here and consumed by the recreation check
+// below, which re-queries currentTransform fresh.
 MdgImage *mdg_surface_acquire(MdgSurface *surface, unsigned width, unsigned height) {
     if (!surface || surface->acquired || !width || !height || width > MDG_MAX_DIMENSION || height > MDG_MAX_DIMENSION) return NULL;
-    if (surface->invalid || surface->width != width || surface->height != height || !surface->count) {
+    if (surface->invalid || surface->suboptimal || surface->width != width || surface->height != height || !surface->count) {
         release_swapchain(surface);
         surface->invalid = false;
+        surface->suboptimal = false;
         surface->width = width; surface->height = height;
         if (surface->surface) {
             if (!create_swapchain(surface, width, height)) release_wsi(surface);
@@ -156,6 +170,8 @@ MdgImage *mdg_surface_acquire(MdgSurface *surface, unsigned width, unsigned heig
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
             failed("acquire swapchain", result); surface->invalid = true; return NULL;
         }
+        // PERSONAL PATCH (not upstream). See the comment above mdg_surface_acquire().
+        if (result == VK_SUBOPTIMAL_KHR) surface->suboptimal = true;
         surface->acquire_pending = true;
         // EVENT_WAIT: WSI image ownership, on the output worker before any producer pixel lock.
         result = gpu->WaitForFences(gpu->device, 1, &surface->available, true, 5000000000ULL);
@@ -181,6 +197,8 @@ bool mdg_surface_present(MdgSurface *surface) {
         VkResult result = gpu->QueuePresentKHR(gpu->queue, &present);
         ok = result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR;
         surface->invalid = result != VK_SUCCESS;
+        // PERSONAL PATCH (not upstream). See the comment above mdg_surface_acquire().
+        if (result == VK_SUBOPTIMAL_KHR) surface->suboptimal = true;
     } else {
         ANativeWindow_Buffer buffer;
         if (!ANativeWindow_setBuffersGeometry(surface->window, image->width, image->height, WINDOW_FORMAT_RGBA_8888) &&
