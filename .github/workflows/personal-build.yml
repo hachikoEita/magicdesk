@@ -42,19 +42,12 @@ jobs:
       - name: Graphics native host tools
         uses: ./.github/actions/setup-graphics-build
 
-      - name: Generate a throwaway personal signing key
-        shell: bash
-        run: |
-          install -d -m 700 "$RUNNER_TEMP/magicdesk-signing"
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/magicdesk-signing/personal.jks" \
-            -storepass personalbuild -keypass personalbuild \
-            -alias personal -keyalg RSA -keysize 2048 -validity 36500 \
-            -dname "CN=Personal Build, OU=hachikoEita, O=Personal, L=NA, ST=NA, C=US"
-
       - name: Build signed APK
+        # Uses the fixed keystore checked into ci-signing/personal.jks (see that directory's
+        # README) so every build on this personal fork shares one signing identity and Android
+        # treats each new build as an update to the last, instead of a conflicting package.
         env:
-          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_STORE_FILE: ${{ runner.temp }}/magicdesk-signing/personal.jks
+          ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_STORE_FILE: ${{ github.workspace }}/ci-signing/personal.jks
           ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_STORE_PASSWORD: personalbuild
           ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_KEY_ALIAS: personal
           ORG_GRADLE_PROJECT_MAGICDESK_RELEASE_KEY_PASSWORD: personalbuild
