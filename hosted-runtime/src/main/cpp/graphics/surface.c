@@ -103,11 +103,24 @@ static bool create_swapchain(MdgSurface *surface, unsigned width, unsigned heigh
         alpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
     else if (!(capabilities.supportedCompositeAlpha & alpha))
         alpha = (VkCompositeAlphaFlagBitsKHR)(capabilities.supportedCompositeAlpha & -capabilities.supportedCompositeAlpha);
+    // PERSONAL PATCH (not upstream). preTransform declares what rotation THIS RENDERER has
+    // already applied to its own output; the compositor trusts that claim and skips its own
+    // correction. This renderer never pre-rotates anything, so declaring currentTransform here
+    // was a lie whenever currentTransform was non-identity -- which, on this OPPO Find N6, is
+    // reliably the case for a freeform window created while already unfolded (not a timing race:
+    // reproduces on every fresh window/session, confirmed on-device). The system-recommended
+    // and simplest-correct choice for a renderer that does not pre-rotate is to always declare
+    // IDENTITY and let the compositor apply the real rotation itself; IDENTITY is required to be
+    // supported whenever it's the currentTransform, and is near-universally supported otherwise,
+    // but fall back to currentTransform on the off chance this device doesn't support it.
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+    if (!(capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR))
+        preTransform = capabilities.currentTransform;
     VkSwapchainCreateInfoKHR info = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = surface->surface, .minImageCount = count, .imageFormat = formats[format].format,
         .imageColorSpace = formats[format].colorSpace, .imageExtent = size, .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = capabilities.currentTransform, .compositeAlpha = alpha,
+        .preTransform = preTransform, .compositeAlpha = alpha,
         .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = true};
     VkResult result = gpu->CreateSwapchainKHR(gpu->device, &info, NULL, &surface->swapchain);
     if (result) return failed("create swapchain", result);
