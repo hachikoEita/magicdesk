@@ -309,7 +309,26 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
             // own (that signal only exists on the Wayland path), so a tap here previously only
             // asked the View system for focus and relied on the framework to notice and summon
             // the IME on its own, which it does not reliably do. Ask explicitly every tap.
-            if (keyboardAllowed) { requestFocus(); textInputChanged(); }
+            //
+            // textInputChanged() alone is not enough: when the active text connection is the
+            // same one as before (e.g. the user manually dismissed the keyboard, then tapped
+            // back into the same field), it takes a fast path that only refreshes cursor/
+            // selection state via textConnection.update() and returns -- it never calls
+            // showSoftInput(). That path exists for genuine content-change notifications on an
+            // already-visible keyboard, not for "please show the keyboard again." Ask directly
+            // in that case instead of relying on it.
+            if (keyboardAllowed) {
+                requestFocus();
+                android.view.inputmethod.InputMethodManager manager = getContext()
+                        .getSystemService(android.view.inputmethod.InputMethodManager.class);
+                if (manager != null && hasWindowFocus() && textConnection != null && textConnection.sameEditor()) {
+                    textConnection.update(manager, this);
+                    if (onCheckIsTextEditor())
+                        manager.showSoftInput(this, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+                } else {
+                    textInputChanged();
+                }
+            }
         }
         if (trackpadGestures && output != null && trackpadGesture.event(event, output, viewport)) return true;
         return pointerInput.event(event);
