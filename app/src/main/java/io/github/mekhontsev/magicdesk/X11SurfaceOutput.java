@@ -25,7 +25,21 @@ final class X11SurfaceOutput implements HostedShellOutput {
     @Override public void key(int androidKey, int scanCode, boolean down) {
         output.key(androidKey, X11InputEncoding.scanCode(scanCode), down);
     }
-    @Override public boolean supportsTouch() { return true; }
+    // PERSONAL PATCH (not upstream): genuine multi-touch contacts are forwarded to a separate
+    // XInput2 touch device ("Lorie touch" in `xinput list`), and Linux apps that don't natively
+    // handle touch (Thunar/GTK included) fall back to the X11/GDK touch-to-pointer emulation
+    // layer to turn that into ordinary clicks. That emulation reliably delivers a single click,
+    // but does not reliably reconstruct a double-click from two separate touch sequences --
+    // confirmed on-device: a real mouse (which never goes through this emulation, see button()
+    // above) double-clicks fine, while two finger taps on the same spot never open a folder,
+    // even with GTK's double-click distance/time settings both loosened far beyond default.
+    // Reporting no touch support here routes finger taps through the same synthetic-click path
+    // already used for the mouse instead (see HostedPointerInput's tap handling), which is
+    // proven reliable for both single- and double-click. Trade-off: genuine multi-touch
+    // gestures handled directly by a Linux app's own touch support (not the trackpad-gesture
+    // feature, which is unaffected) are lost -- acceptable for this fork's single-pointer,
+    // desktop-style usage.
+    @Override public boolean supportsTouch() { return false; }
     @Override public boolean supportsTablet() { return true; }
     @Override public void touch(int contact, io.github.mekhontsev.magicdesk.hosted.HostedTouchPhase phase,
             float x, float y, float pressure) { output.touch(contact, phase, x, y, pressure); }
