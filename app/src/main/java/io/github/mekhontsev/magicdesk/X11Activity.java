@@ -5,11 +5,14 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
@@ -69,24 +72,74 @@ public final class X11Activity extends Activity implements
         surface.trackpadGestures(MagicDeskSettings.load().touchTrackpadGestures);
         content = new HostedContentLayout(this, surface);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
-        // PERSONAL PATCH (not upstream): a floating keyboard toggle, docked to the screen edge
-        // like the Shizuku assistant bubble. The soft keyboard doesn't always reliably reappear
-        // after being manually dismissed (X11 content has no notion of "which part is a text
-        // field" for Android to re-summon it automatically), so this gives a direct, guaranteed
-        // show/hide instead of relying on tap heuristics that proved too fragile in practice.
         FrameLayout overlay = new FrameLayout(this);
         overlay.addView(root, new FrameLayout.LayoutParams(-1, -1));
-        // TEMPORARY DIAGNOSTIC (not upstream, to be replaced): unmistakable probe to find out
-        // whether this overlay renders at all, independent of any styling/theme call that could
-        // silently no-op. If this giant red square isn't visible, the problem is the overlay/
-        // view-hierarchy approach itself, not button styling.
-        android.view.View probe = new android.view.View(this);
-        probe.setBackgroundColor(android.graphics.Color.RED);
-        probe.setOnClickListener(v -> surface.toggleKeyboard());
-        int probeSize = ui.dp(160);
-        FrameLayout.LayoutParams probeParams = new FrameLayout.LayoutParams(probeSize, probeSize);
-        probeParams.gravity = Gravity.CENTER;
-        overlay.addView(probe, probeParams);
+        // PERSONAL PATCH (not upstream): a floating keyboard toggle, draggable to any screen
+        // edge like the Shizuku assistant bubble. The soft keyboard doesn't always reliably
+        // reappear after being manually dismissed (X11 content has no notion of "which part is
+        // a text field" for Android to re-summon it automatically), so this gives a direct,
+        // guaranteed show/hide instead of relying on tap heuristics that proved too fragile in
+        // practice. Uses plain hardcoded colors rather than UiAppearance's theme helpers -- an
+        // earlier attempt using those rendered completely invisible for reasons not tracked
+        // down, confirmed by a diagnostic probe using plain colors that rendered fine.
+        ImageButton keyboardToggle = new ImageButton(this);
+        keyboardToggle.setImageResource(R.drawable.ic_keyboard);
+        keyboardToggle.setColorFilter(Color.WHITE);
+        GradientDrawable bubble = new GradientDrawable();
+        bubble.setShape(GradientDrawable.OVAL);
+        bubble.setColor(0xFF2D7DF6);
+        keyboardToggle.setBackground(bubble);
+        keyboardToggle.setContentDescription(getString(R.string.action_toggle_keyboard));
+        int bubbleSize = ui.dp(48);
+        int edgeMargin = ui.dp(4);
+        FrameLayout.LayoutParams toggleParams = new FrameLayout.LayoutParams(bubbleSize, bubbleSize);
+        toggleParams.gravity = Gravity.TOP | Gravity.START;
+        overlay.addView(keyboardToggle, toggleParams);
+        int touchSlop = ViewConfiguration.get(this).getScaledTouchSlop();
+        float[] downRaw = new float[2];
+        int[] startMargin = new int[2];
+        boolean[] dragging = new boolean[1];
+        keyboardToggle.setOnTouchListener((v, event) -> {
+            int maxLeft = Math.max(0, overlay.getWidth() - bubbleSize);
+            int maxTop = Math.max(0, overlay.getHeight() - bubbleSize);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downRaw[0] = event.getRawX(); downRaw[1] = event.getRawY();
+                    startMargin[0] = toggleParams.leftMargin; startMargin[1] = toggleParams.topMargin;
+                    dragging[0] = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = event.getRawX() - downRaw[0], dy = event.getRawY() - downRaw[1];
+                    if (!dragging[0] && dx * dx + dy * dy > touchSlop * touchSlop) dragging[0] = true;
+                    if (dragging[0]) {
+                        toggleParams.leftMargin = Math.max(0, Math.min(maxLeft, startMargin[0] + Math.round(dx)));
+                        toggleParams.topMargin = Math.max(0, Math.min(maxTop, startMargin[1] + Math.round(dy)));
+                        v.requestLayout();
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (dragging[0]) {
+                        int distLeft = toggleParams.leftMargin, distRight = maxLeft - toggleParams.leftMargin;
+                        int distTop = toggleParams.topMargin, distBottom = maxTop - toggleParams.topMargin;
+                        int nearest = Math.min(Math.min(distLeft, distRight), Math.min(distTop, distBottom));
+                        if (nearest == distLeft) toggleParams.leftMargin = 0;
+                        else if (nearest == distRight) toggleParams.leftMargin = maxLeft;
+                        else if (nearest == distTop) toggleParams.topMargin = 0;
+                        else toggleParams.topMargin = maxTop;
+                        v.requestLayout();
+                    } else surface.toggleKeyboard();
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        keyboardToggle.post(() -> {
+            toggleParams.leftMargin = Math.max(0, overlay.getWidth() - bubbleSize - edgeMargin);
+            toggleParams.topMargin = Math.max(0, (overlay.getHeight() - bubbleSize) / 2);
+            keyboardToggle.requestLayout();
+        });
         setContentView(overlay);
         HostedStartupWindow.layout(this);
         window = state == null ? getIntent().getLongExtra(WINDOW, 0) : state.getLong(WINDOW);
