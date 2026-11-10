@@ -76,21 +76,17 @@ public final class X11Activity extends Activity implements
         // show/hide instead of relying on tap heuristics that proved too fragile in practice.
         FrameLayout overlay = new FrameLayout(this);
         overlay.addView(root, new FrameLayout.LayoutParams(-1, -1));
-        ImageButton keyboardToggle = new ImageButton(this);
-        keyboardToggle.setImageResource(R.drawable.ic_keyboard);
-        UiAppearance.imageStates(keyboardToggle, UiColor.ON_ACCENT);
-        GradientDrawable bubble = new GradientDrawable();
-        bubble.setShape(GradientDrawable.OVAL);
-        bubble.setColor(UiAppearance.color(this, UiColor.ACCENT));
-        keyboardToggle.setBackground(bubble);
-        keyboardToggle.setElevation(ui.dp(4));
-        keyboardToggle.setContentDescription(getString(R.string.action_toggle_keyboard));
-        keyboardToggle.setOnClickListener(v -> surface.toggleKeyboard());
-        int bubbleSize = ui.dp(44);
-        FrameLayout.LayoutParams toggleParams = new FrameLayout.LayoutParams(bubbleSize, bubbleSize);
-        toggleParams.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-        toggleParams.rightMargin = ui.dp(8);
-        overlay.addView(keyboardToggle, toggleParams);
+        // TEMPORARY DIAGNOSTIC (not upstream, to be replaced): unmistakable probe to find out
+        // whether this overlay renders at all, independent of any styling/theme call that could
+        // silently no-op. If this giant red square isn't visible, the problem is the overlay/
+        // view-hierarchy approach itself, not button styling.
+        android.view.View probe = new android.view.View(this);
+        probe.setBackgroundColor(android.graphics.Color.RED);
+        probe.setOnClickListener(v -> surface.toggleKeyboard());
+        int probeSize = ui.dp(160);
+        FrameLayout.LayoutParams probeParams = new FrameLayout.LayoutParams(probeSize, probeSize);
+        probeParams.gravity = Gravity.CENTER;
+        overlay.addView(probe, probeParams);
         setContentView(overlay);
         HostedStartupWindow.layout(this);
         window = state == null ? getIntent().getLongExtra(WINDOW, 0) : state.getLong(WINDOW);
