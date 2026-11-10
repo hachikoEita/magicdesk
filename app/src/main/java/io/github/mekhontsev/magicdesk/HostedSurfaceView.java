@@ -41,9 +41,6 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     private HostedTextInputConnection textConnection;
     private java.util.function.Predicate<MotionEvent> windowMotion;
     private float rawX, rawY;
-    // PERSONAL PATCH (not upstream): see onApplyWindowInsets() and motion() below.
-    private boolean imeWasVisible;
-    private boolean keyboardManuallyDismissed;
 
     HostedSurfaceView(Context context) {
         super(context);
@@ -264,17 +261,25 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
 
     void focusBoundary(Runnable callback) { focusBoundary = callback; }
 
-    // PERSONAL PATCH (not upstream): the only signal this view gets that the user manually
-    // swiped the on-screen keyboard away (rather than it being hidden because focus moved
-    // elsewhere, or never having been shown at all) is the IME's own visibility inset
-    // transitioning from visible to hidden while this view still holds focus. Record that one
-    // transition so the next tap (see motion() above) knows to explicitly ask for the keyboard
-    // back, instead of forcing it to reappear on every ordinary tap.
-    @Override public android.view.WindowInsets onApplyWindowInsets(android.view.WindowInsets insets) {
-        boolean imeVisible = insets.isVisible(android.view.WindowInsets.Type.ime());
-        if (imeWasVisible && !imeVisible && isFocused()) keyboardManuallyDismissed = true;
-        imeWasVisible = imeVisible;
-        return super.onApplyWindowInsets(insets);
+    // PERSONAL PATCH (not upstream): explicit, unambiguous keyboard control for a floating
+    // on-screen button. Earlier attempts to auto-detect "the user just swiped the keyboard away
+    // and wants it back" from IME visibility transitions proved too eager in practice -- Android
+    // hides the IME for plenty of reasons besides a manual swipe (losing window focus, switching
+    // windows, etc.), and treating all of those as "please force it back on the next tap"
+    // regressed to showing the keyboard on nearly every tap. Rather than keep chasing that
+    // heuristic, this gives the user a direct, guaranteed toggle instead of a guess.
+    boolean toggleKeyboard() {
+        if (!keyboardAllowed) return false;
+        android.view.inputmethod.InputMethodManager manager = getContext()
+                .getSystemService(android.view.inputmethod.InputMethodManager.class);
+        if (manager == null) return false;
+        requestFocus();
+        if (textConnection == null || !onCheckIsTextEditor()) { textInputChanged(); return true; }
+        boolean imeVisible = getRootWindowInsets() != null
+                && getRootWindowInsets().isVisible(android.view.WindowInsets.Type.ime());
+        if (imeVisible) manager.hideSoftInputFromWindow(getWindowToken(), 0);
+        else { textConnection.update(manager, this); manager.showSoftInput(this, android.view.inputmethod.InputMethodManager.SHOW_FORCED); }
+        return true;
     }
 
     void shareKeyboard(HostedSurfaceView owner) {
@@ -325,33 +330,14 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
             // own (that signal only exists on the Wayland path), so a tap here previously only
             // asked the View system for focus and relied on the framework to notice and summon
             // the IME on its own, which it does not reliably do. Ask explicitly every tap.
-            if (keyboardAllowed) {
-                requestFocus();
-                // PERSONAL PATCH (not upstream): textInputChanged() alone is not enough for one
-                // specific case -- when the active text connection is the same one as before AND
-                // the user had manually swiped the keyboard away since it was last shown, its
-                // sameEditor() fast path only refreshes cursor/selection state and returns without
-                // ever calling showSoftInput(). That path exists for genuine content-change
-                // notifications on an already-visible keyboard, not for "please show the keyboard
-                // again," so it never recovers from a manual dismiss on its own.
-                //
-                // We only force a re-show in that exact situation (see onApplyWindowInsets()),
-                // not on every tap into an already-focused field: this surface can't tell which
-                // part of the embedded X11 content is a genuine text field versus a button or
-                // window chrome, so showing on every tap would pop the keyboard up everywhere.
-                if (keyboardManuallyDismissed && textConnection != null && textConnection.sameEditor()) {
-                    keyboardManuallyDismissed = false;
-                    android.view.inputmethod.InputMethodManager manager = getContext()
-                            .getSystemService(android.view.inputmethod.InputMethodManager.class);
-                    if (manager != null && hasWindowFocus()) {
-                        textConnection.update(manager, this);
-                        if (onCheckIsTextEditor())
-                            manager.showSoftInput(this, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
-                    }
-                } else {
-                    textInputChanged();
-                }
-            }
+            //
+            // This only covers a tap into a genuinely different editor (textInputChanged()'s own
+            // "new editor" branch actually calls showSoftInput()); it deliberately does NOT force
+            // the keyboard back open when tapping into the same already-focused field after a
+            // manual dismiss -- this surface can't tell a real text field from a button or window
+            // chrome, so doing that on every tap previously regressed to showing the keyboard
+            // almost everywhere. See toggleKeyboard() for the explicit, user-driven alternative.
+            if (keyboardAllowed) { requestFocus(); textInputChanged(); }
         }
         if (trackpadGestures && output != null && trackpadGesture.event(event, output, viewport)) return true;
         return pointerInput.event(event);
