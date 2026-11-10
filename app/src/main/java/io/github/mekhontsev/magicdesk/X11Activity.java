@@ -72,8 +72,34 @@ public final class X11Activity extends Activity implements
         surface.trackpadGestures(MagicDeskSettings.load().touchTrackpadGestures);
         content = new HostedContentLayout(this, surface);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        // PERSONAL PATCH (not upstream): a small visible dot tracking trackpad mode's virtual
+        // cursor. Android only shows the PointerIcon cursor image for devices that report hover
+        // (a real mouse); finger-driven trackpad gestures never hover, so without this the user
+        // has no way to see where a tap will actually click -- confirmed on-device: trackpad mode
+        // appeared completely broken with no indicator at all. Added to the same overlay as the
+        // keyboard bubble below so it floats above the content regardless of window layout.
         FrameLayout overlay = new FrameLayout(this);
         overlay.addView(root, new FrameLayout.LayoutParams(-1, -1));
+        View trackpadCursor = new View(this);
+        GradientDrawable trackpadCursorDot = new GradientDrawable();
+        trackpadCursorDot.setShape(GradientDrawable.OVAL);
+        trackpadCursorDot.setColor(0xB3FFFFFF);
+        trackpadCursorDot.setStroke(Math.max(1, ui.dp(2)), Color.BLACK);
+        trackpadCursor.setBackground(trackpadCursorDot);
+        trackpadCursor.setClickable(false);
+        trackpadCursor.setFocusable(false);
+        trackpadCursor.setVisibility(View.GONE);
+        int trackpadCursorSize = ui.dp(20);
+        overlay.addView(trackpadCursor, new FrameLayout.LayoutParams(trackpadCursorSize, trackpadCursorSize));
+        surface.trackpadCursorListener((visible, cx, cy) -> trackpadCursor.post(() -> {
+            if (!visible) { trackpadCursor.setVisibility(View.GONE); return; }
+            android.graphics.PointF screen = surface.contentPointOnScreen(cx, cy);
+            int[] overlayLocation = new int[2];
+            overlay.getLocationOnScreen(overlayLocation);
+            trackpadCursor.setX(screen.x - overlayLocation[0] - trackpadCursorSize / 2f);
+            trackpadCursor.setY(screen.y - overlayLocation[1] - trackpadCursorSize / 2f);
+            trackpadCursor.setVisibility(View.VISIBLE);
+        }));
         // PERSONAL PATCH (not upstream): a floating keyboard toggle, draggable to any screen
         // edge like the Shizuku assistant bubble. The soft keyboard doesn't always reliably
         // reappear after being manually dismissed (X11 content has no notion of "which part is

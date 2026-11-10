@@ -18,12 +18,20 @@ import android.view.ViewConfiguration;
  * left untouched for the normal HostedPointerInput/HostedDirectInput paths.
  */
 final class HostedTrackpadGesture {
+    // PERSONAL PATCH (not upstream): the relative cursor this class drives has no visual
+    // presence of its own -- Android only paints a PointerIcon for devices that generate hover
+    // events, which a touchscreen never does, so without this listener the user has no way to
+    // see where a tap will actually click. The owning view uses this to draw its own on-screen
+    // indicator in sync with the virtual cursor.
+    interface CursorListener { void onCursorState(boolean visible, float x, float y); }
+
     private final View view;
     private final GestureDetector gestureDetector;
     private final float touchSlop;
     private float x = .5f, y = .5f;
     private float lastX, lastY, travel, pendingDragX, pendingDragY;
     private boolean usedTwoFingers, scrolling, longPressHandled, dragActive;
+    private CursorListener cursorListener;
 
     HostedTrackpadGesture(View view) {
         this.view = view;
@@ -38,6 +46,15 @@ final class HostedTrackpadGesture {
                 }
             }
         });
+    }
+
+    void cursorListener(CursorListener listener) { this.cursorListener = listener; }
+
+    /** PERSONAL PATCH (not upstream): toggled alongside trackpad mode itself, so the on-screen
+     * indicator appears the moment the mode is turned on (at the last known position) instead of
+     * only after the first drag, and disappears the moment it's turned off. */
+    void setEnabled(boolean enabled) {
+        if (cursorListener != null) cursorListener.onCursorState(enabled, x, y);
     }
 
     /** True when this event was a finger-on-touchscreen gesture it claimed and handled. */
@@ -122,6 +139,7 @@ final class HostedTrackpadGesture {
         x = Math.max(0, Math.min(1, x + dx / viewport.width()));
         y = Math.max(0, Math.min(1, y + dy / viewport.height()));
         output.pointer(x, y);
+        if (cursorListener != null) cursorListener.onCursorState(true, x, y);
     }
 
     private void click(HostedSurfaceOutput output, HostedSurfaceOutput.Button button) {

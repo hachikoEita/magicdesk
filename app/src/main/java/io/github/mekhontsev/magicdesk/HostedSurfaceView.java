@@ -188,7 +188,20 @@ final class HostedSurfaceView extends SurfaceView implements SurfaceHolder.Callb
     }
 
     /** PERSONAL PATCH (not upstream): relative trackpad-style gestures for direct on-screen touch. */
-    void trackpadGestures(boolean enabled) { trackpadGestures = enabled; }
+    void trackpadGestures(boolean enabled) { trackpadGestures = enabled; trackpadGesture.setEnabled(enabled); }
+
+    /** PERSONAL PATCH (not upstream): lets the window host draw a visible on-screen indicator for
+     * the trackpad's virtual cursor (see HostedTrackpadGesture.CursorListener for why one is needed). */
+    void trackpadCursorListener(HostedTrackpadGesture.CursorListener listener) { trackpadGesture.cursorListener(listener); }
+
+    /** PERSONAL PATCH (not upstream): screen-space geometry for a single normalized content point,
+     * for positioning the trackpad cursor indicator; mirrors geometry()'s own coordinate mapping. */
+    android.graphics.PointF contentPointOnScreen(float contentX, float contentY) {
+        int[] location = new int[2];
+        locateOnScreen(location);
+        return new android.graphics.PointF(
+                location[0] + viewport.hostX(contentX), location[1] + viewport.hostY(contentY));
+    }
 
     void allowInput(boolean allowed) {
         if (inputAllowed && !allowed) releaseInput();
