@@ -80,24 +80,24 @@ public final class X11Activity extends Activity implements
         // keyboard bubble below so it floats above the content regardless of window layout.
         FrameLayout overlay = new FrameLayout(this);
         overlay.addView(root, new FrameLayout.LayoutParams(-1, -1));
-        View trackpadCursor = new View(this);
-        GradientDrawable trackpadCursorDot = new GradientDrawable();
-        trackpadCursorDot.setShape(GradientDrawable.OVAL);
-        trackpadCursorDot.setColor(0xB3FFFFFF);
-        trackpadCursorDot.setStroke(Math.max(1, ui.dp(2)), Color.BLACK);
-        trackpadCursor.setBackground(trackpadCursorDot);
+        android.widget.ImageView trackpadCursor = new android.widget.ImageView(this);
+        trackpadCursor.setImageResource(R.drawable.ic_trackpad_cursor);
         trackpadCursor.setClickable(false);
         trackpadCursor.setFocusable(false);
         trackpadCursor.setVisibility(View.GONE);
-        int trackpadCursorSize = ui.dp(20);
+        int trackpadCursorSize = ui.dp(14);
         overlay.addView(trackpadCursor, new FrameLayout.LayoutParams(trackpadCursorSize, trackpadCursorSize));
+        // The drawable's click point (its arrow tip) sits at (4,2) of its 24x24 viewport, not at
+        // the view's center -- offset by that fraction of the displayed size, not by half of it.
+        float trackpadCursorTipX = trackpadCursorSize * (4f / 24f);
+        float trackpadCursorTipY = trackpadCursorSize * (2f / 24f);
         surface.trackpadCursorListener((visible, cx, cy) -> trackpadCursor.post(() -> {
             if (!visible) { trackpadCursor.setVisibility(View.GONE); return; }
             android.graphics.PointF screen = surface.contentPointOnScreen(cx, cy);
             int[] overlayLocation = new int[2];
             overlay.getLocationOnScreen(overlayLocation);
-            trackpadCursor.setX(screen.x - overlayLocation[0] - trackpadCursorSize / 2f);
-            trackpadCursor.setY(screen.y - overlayLocation[1] - trackpadCursorSize / 2f);
+            trackpadCursor.setX(screen.x - overlayLocation[0] - trackpadCursorTipX);
+            trackpadCursor.setY(screen.y - overlayLocation[1] - trackpadCursorTipY);
             trackpadCursor.setVisibility(View.VISIBLE);
         }));
         // PERSONAL PATCH (not upstream): a floating keyboard toggle, draggable to any screen
